@@ -5,7 +5,7 @@ Last edited : 30/10/2017
 ## Outline
 
 I used Apache Spark to deal with massive astronomical data from the PetaSKy project. 
-This work is intended as an example of what simple Spark syntax can achieve on massive data, and is based on [this]() exercice (in french).
+This work is intended as an example of what simple Spark syntax can achieve on massive data, and is based on [this](https://forge.univ-lyon1.fr/EMMANUEL.COQUERY/tp-spark-2017/blob/master/README.md) exercice (in french).
 
 This repository contains :
 
