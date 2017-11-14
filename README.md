@@ -20,5 +20,5 @@ This repository contains :
  
 ## USAGE : 
 
-- To show all INFO lines from SPark : *spark-submit SimpleApp.py*;
+- To run in a Spark verbose mode : *spark-submit SimpleApp1.py*;
 - To show only meaningfull results : *spark-submit SimpleApp1.py 2> out*.
