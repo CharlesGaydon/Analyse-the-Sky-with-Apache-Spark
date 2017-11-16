@@ -9,16 +9,22 @@ This work is intended as an example of what simple Spark syntax can achieve on m
 
 This repository contains :
 
-- a python script designed for Apache Spark, using Map/Reduce ;
+- two python script designed for Apache Spark, using Map/Reduce, and implementing two different partitionning methods ;
 - two csv files containing samples of the sources and object we deal with ;
 - two sql files containing the description of the  attributes of the aforementionned source and object data ;
-- a Source-subset folder, containing a small subset of the Source files from the PetaSky project. 
+- a *Sources* folder, containing a small subset of the Source files from the PetaSky project. 
 
  We first extract the attribute index from the corresponding SQL description, and then determine the object that has the most moved along the observations. 
  The distance travelled is roughly estimated as the euclidian distance between the max and min values from two positionnal attribute : *ra* and *decl*.
+ In the second partitionning method, we use our knwoledge that ra and decl are angles to transform them from '[0, 360°]' to '[-180°,180°]'.
  More comments are in the python script.
  
 ## USAGE : 
 
-- To run in a Spark verbose mode : *spark-submit SimpleApp1.py*;
-- To show only meaningfull results : *spark-submit SimpleApp1.py 2> out*.
+- To run in a Spark verbose mode :
+ 
+	spark-submit SimpleApp1.py
+
+- To show only meaningfull results :
+
+	spark-submit SimpleApp1.py 2> trash_file_to_delete
