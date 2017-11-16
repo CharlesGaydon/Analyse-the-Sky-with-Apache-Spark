@@ -57,20 +57,27 @@ def get_count(file_path, my_attr, dico) :
 #print(get_count(SA_source, attr, dico_source))
 
 
-### count occurences and get position data
-print('Import of min and max')
+### count occurences and get position dataprint('Import of min and max')
 
 PATH_source = "/tp-data/Source/Source-*.csv"
 attr = ["ra","decl"]
+
+### 
+def t_ra(ra):
+	if ra>180:
+		return(ra-360)
+	else:
+		return(ra)
 
 def get_range(file_path, my_attr, dico) :
     ra = dico[my_attr[0]]
     decl = dico[my_attr[1]]
     logData = sc.textFile(file_path)
     col = logData.map(lambda line : line.split(','))\
-        .map(lambda line : (float(line[ra]),float(line[ra]), float(line[decl]), float(line[decl]) ))\
+        .map(lambda line : (t_ra(float(line[ra])),t_ra(float(line[ra])), float(line[decl]), float(line[decl]) ))\
         .filter(lambda t : t[0] != 'NULL' and t[2]!='NULL')\
         .reduce(lambda a,b : (min(a[0],b[0]), max(a[1],b[1]), min(a[2],b[2]), max(a[3],b[3]) ))
+    
     return(col)
 
 if not os.path.isfile('ra_decl_range.csv') : 
@@ -81,11 +88,11 @@ if not os.path.isfile('ra_decl_range.csv') :
         wr = csv.writer(file, delimiter = ',')    
         wr.writerow(minmaxs)
 else :
+    print('Import of min and max: ')
     with open('ra_decl_range.csv', 'rb') as file:
         minmaxs = list(csv.reader(file, delimiter=','))[0]
         minmaxs = [float(x) for x in minmaxs] 
         print(minmaxs)
-
 
 print('Partitionning')
 
@@ -108,8 +115,6 @@ class Zone():
 		else : 
 			return(True)
 
-
-
 class Grid:
 	def __init__(self, minmaxs, N):
                 self.N = N
@@ -120,7 +125,6 @@ class Grid:
 		self.max_decl = minmaxs[3]
 		self.inc_decl = (self.max_decl-self.min_decl)/N
 		self.grid = [[[0] for x in range(N)] for x in range(N)] 
-		#print(self.grid)
 		Id = 0
 		for i in range(N):
 			for j in range(N):
@@ -162,7 +166,7 @@ def fill(grid, logData):
 	ra = dico_source["ra"]
 	decl = dico_source["decl"]
 	col = logData.map(lambda line : line.split(','))\
-			.map(lambda line : (grid.return_id(float(line[ra]), float(line[decl])), ','.join(line)))\
+			.map(lambda line : (grid.return_id(t_ra(float(line[ra])), float(line[decl])), ','.join(line)))\
 			.partitionBy(grid.N*grid.N).map(lambda tu : tu[1])
 	col.saveAsTextFile('hdfs:///user/'+identifiant + '/'+name_partition+'/')
 	grid.histo = col.mapPartitions(count_in_a_partition)
