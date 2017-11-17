@@ -65,7 +65,7 @@ def get_count(file_path, my_attr, dico) :
 PATH_source = "/tp-data/Source/Source-*.csv"
 attr = ["ra","decl"]
 
-### Transform the ra attribute from [0,360°] to [-180,180°]
+### Transform the ra attribute from [0,360] to [-180,180] degrees
 def t_ra(ra):
 	if ra>180:
 		return(ra-360)
@@ -102,7 +102,7 @@ else :
 
 ### Define the class for a smart partition of the data,
 ### suitable for further computations.
-print('Partitionning N°2 : Mapped Naive Partitionning.')
+print('Partitionning #3 : Mapped Overlapping Partitionning.')
 
 class Zone():
 	def __init__(self, MM, Id):
@@ -111,19 +111,25 @@ class Zone():
 		self.min_decl = MM[2]
 		self.max_decl = MM[3]
 	def ra_is_in(self, ra) : 
-		if ra>=self.max_ra:
+		if ra>self.max_ra:
 			return(False)
-		else : 
+		elif ra< self.min_ra : 
+			return(False)
+		else :
 			return(True)
 			
 	def decl_is_in(self, decl) : 
-		if decl>=self.max_decl:
+		if decl>self.max_decl:
+			return(False)
+		elif decl< self.min_decl: 
 			return(False)
 		else : 
 			return(True)
+	def __str__(self):
+		return('range ra : '+ str([self.min_ra,self.max_ra])+' ; range decl : ' + str([self.min_decl,self.max_decl]))
 
 class Grid:
-	def __init__(self, minmaxs, N):
+	def __init__(self, minmaxs, N, overlap = 0.05):
                 self.N = N
 		self.min_ra = minmaxs[0]
 		self.max_ra = minmaxs[1]
@@ -135,21 +141,33 @@ class Grid:
 		Id = 0
 		for i in range(N):
 			for j in range(N):
-				self.grid[i][j] = Zone([self.min_ra +self.inc_ra*i, self.min_ra+self.inc_ra*(i+1), self.min_decl+self.inc_decl *j, self.min_decl+self.inc_decl*(j+1)], Id)
+				self.grid[i][j] = Zone([self.min_ra +self.inc_ra*(i-overlap) , self.min_ra+self.inc_ra*(i+1+overlap), self.min_decl+self.inc_decl*(j-overlap), self.min_decl+self.inc_decl*(j+1+overlap)], Id)
+				#print(self.grid[i][j])
 				Id+=1
  		
-	def return_id(self, a,b):
-		I = 0
-		J = 0
+	def return_key_value_strings(self, a,b, line):
+		I = []
+		J = []
 		for i in range(self.N):
 			if self.grid[i][0].ra_is_in(a) :
-				I = i
-				break
-		for j in range(self.N):
-			if self.grid[I][j].decl_is_in(b) :
-				J = j
-				break
-		return(I*self.N+J)
+				I.append(i)
+				if (i+1)<self.N:
+					if self.grid[i+1][0].ra_is_in(a) :
+						I.append(i+1)
+		
+		for j in range(self.N): 
+			if self.grid[0][j].decl_is_in(b) : #ok only because it is a square grid.
+				J.append(j)
+				if (j+1)<self.N:
+					if self.grid[0][j+1].decl_is_in(b) :
+						J.append(j+1)
+		couples = [] 
+		for i in I:
+			for j in J:
+				couples.append(str(int(i*self.N+j))+'#'+line)
+		couples = '_'.join(couples)
+		assert(len(I)!=0 and len(J)!=0)
+		return(couples)
 
 	def generate_repartition(self):
 		nbr_line_csv = self.histo.coalesce(1).collect()
@@ -168,21 +186,34 @@ class Grid:
 ### A function to count elements in each partition 
 def count_in_a_partition(iterator):
 	yield sum(1 for _ in iterator)
+
+### to turn "15#line" in (15, "line")
+def clean_couple(cou):
+	C = cou.split("#")
+	C[0] = int(C[0].encode('ascii','ignore'))
+	#print(C)
+	return(tuple(C))
 	
 ### A function to create the partition in grid.
 def fill(grid, logData):
 	ra = dico_source["ra"]
 	decl = dico_source["decl"]
 	col = logData.map(lambda line : line.split(','))\
-			.map(lambda line : (grid.return_id(t_ra(float(line[ra])), float(line[decl])), ','.join(line)))\
+			.map(lambda line : (grid.return_key_value_strings(t_ra(float(line[ra])), float(line[decl]),','.join(line))))\
+			.flatMap(lambda couples : couples.split('_'))\
+			.map(clean_couple)\
 			.partitionBy(grid.N*grid.N).map(lambda tu : tu[1])
 	col.saveAsTextFile('hdfs:///user/'+identifiant + '/'+name_partition+'/')
 	grid.histo = col.mapPartitions(count_in_a_partition)
 
 
-G = Grid(minmaxs,7)
+overlap = 0.10
+assert overlap>=0 and overlap<1
+G = Grid(minmaxs,7, overlap)
 fill(G, sc.textFile("/tp-data/Source/Source-*.csv"))
 csv_file_name = 'hdfs:///user/'+identifiant+'/'+name_partition+'/Partition_metadata/'
 lines = G.generate_repartition()
 sc.parallelize(lines,1).saveAsTextFile(csv_file_name) #had to be outside!
 print('The End.')
+
+#tested : overlap=0 give same results as SparkApp2.py.
