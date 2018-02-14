@@ -20,6 +20,7 @@ import csv
 from pyspark import SparkContext
 import sys
 from math import sqrt
+import numpy as np
 
 identifiant = 'p1513939'
 
@@ -111,185 +112,195 @@ class Zone():
 		self.Id = Id #never changed
 
 	def ra_is_in(self, ra) : 
-		if ra>self.max_ra:
-			return(False)
-		elif ra< self.min_ra : 
-			return(False)
-		else :
+		if ra<=self.max_ra and ra>= self.min_ra:
 			return(True)
+		else:
+			return(False)
 			
 	def decl_is_in(self, decl) : 
-		if decl>self.max_decl:
-			return(False)
-		elif decl< self.min_decl: 
-			return(False)
-		else : 
+		if decl<=self.max_decl and decl>=self.min_decl:
 			return(True)
+		else: 
+			return(False)
 
 	def __str__(self):
 		return('range ra : '+ str([self.min_ra,self.max_ra])+' ; range decl : ' + str([self.min_decl,self.max_decl]))
 
 class Grid:
-	def __init__(self, minmaxs, N, overlap = 0.05, max_lines_in_part = 175000):
+	def __init__(self, minmaxs, M,N, overlap = 0.05, max_lines_in_part = 175000):
                 self.N = N
+		self.M = M
 		self.max_lines_in_part = max_lines_in_part
 		self.min_ra = minmaxs[0]
 		self.max_ra = minmaxs[1]
-		self.inc_ra = (self.max_ra-self.min_ra)/N
 		self.min_decl = minmaxs[2]
 		self.max_decl = minmaxs[3]
-		self.inc_decl = (self.max_decl-self.min_decl)/N
-		self.grid = [[[0] for x in range(N)] for x in range(N)] 
-		Id = 0
-		for i in range(N):
+	        self.grid_1 = [[0] for x in range(M)]
+		self.grid_2 = [[[0] for x in range(N)] for x in range(M)] 
+		Id2 = 0
+		for i in range(M):
+	        	self.grid_1[i] = Zone([0,0,self.min_decl,self.max_decl],i)
 			for j in range(N):
-				self.grid[i][j] = Zone([self.min_ra +self.inc_ra*(i-overlap) , self.min_ra+self.inc_ra*(i+1+overlap), self.min_decl+self.inc_decl*(j-overlap), self.min_decl+self.inc_decl*(j+1+overlap)], Id)
-				#print(self.grid[i][j])
-				Id+=1
- 		
-	def return_key_value_strings(self, a,b, line):
+				self.grid_2[i][j] = Zone([0,0,0,0],Id2)
+        		        Id2+=1
+        print("Grids initialized.")
+	def __str__(self):
+		out = ''
+		for i in range(self.M):
+			out+= str(self.grid_2[i])+'\n'
+		return(out)
+
+	def update_ra(self, dec):
+        	assert(len(dec)==(self.M+1))
+        	for i in range(self.M):
+	            	g = self.grid_1[i]
+        	    	g.min_ra = dec[i]
+            		g.max_ra = dec[i+1]
+			for j in range(self.N):
+				g = self.grid_2[i][j]
+				g.min_ra = dec[i]
+				g.max_ra = dec[i+1]
+		for j in range(self.N):
+			self.grid_2[0][j].min_ra = self.min_ra
+			self.grid_2[-1][j].max_ra = self.max_ra
+        	self.grid_1[0].min_ra = self.min_ra
+		self.grid_1[-1].max_ra = self.max_ra
+		print("Limits for ra updated.")
+	def update_decl(self,dec):
+		assert(len(dec)==(self.M) and len(dec[0])==(self.N+1))
+		for i, d in enumerate(dec):
+			for j in range(self.N):
+				g = self.grid_2[i][j]
+				g.min_decl = d[j]
+				g.max_decl = d[j+1]
+		for i in range(self.M):
+			self.grid_2[i][0].min_decl = self.min_decl
+			self.grid_2[i][-1].max_decl = self.max_decl
+
+	def return_part_2(self, a,b, line):
+		"""
+        	Get couple key-value for ordered grid with possible overlapping, based on ra only.
+        	"""
 		I = []
-		J = []
-		for i in range(self.N):
-			if self.grid[i][0].ra_is_in(a) :
+		for i in range(self.M):
+			if self.grid_1[i].ra_is_in(a) :
+				I.append(i)
+				if (i+1)<self.M:
+					if self.grid_1[i+1].ra_is_in(a) :
+						I.append(i+1)
+                	        break
+		couples = []
+		for i in I:
+			for j in range(self.N):
+				if self.grid_2[i][j].decl_is_in(b):
+        				couples.append(str(int(i*self.N+j))+"#"+line)
+					if (j+1)<self.N:
+						if self.grid[i][j+1].decl_is_in(b):
+							couples.append(str(int(i*self.N+j))+"#"+line)	
+				break
+		if couples == []:
+			raise Exception("void")
+			print(a,b)
+		couples = '_'.join(couples)
+		return(couples)
+
+	def return_part_1(self, a, line):
+		I = []
+		for i in range(self.M):
+			if self.grid_1[i].ra_is_in(a):
 				I.append(i)
 				if (i+1)<self.N:
-					if self.grid[i+1][0].ra_is_in(a) :
+					if self.grid_1[i+1].ra_is_in(a):
 						I.append(i+1)
-		
-		for j in range(self.N): 
-			if self.grid[0][j].decl_is_in(b) : #ok only because it is a square grid.
-				J.append(j)
-				if (j+1)<self.N:
-					if self.grid[0][j+1].decl_is_in(b) :
-						J.append(j+1)
-		couples = [] 
-		for i in I:
-			for j in J:
-				couples.append(str(int(i*self.N+j))+'#'+line)
-		couples = '_'.join(couples)
-		assert(len(I)!=0 and len(J)!=0)
-		return(couples)
-
-	def return_key_value_strings_on_second_part(self, a,b, line):
-		#this should works for grids of any shape, but is expensive...
-		Ids = []
-		for i in range(self.N):
-			for j in range(self.N):
-				if self.grid[i][j].ra_is_in(a) :
-					if self.grid[i][j].decl_is_in(b) :
-						Ids.append(self.grid[i][j].Id)	
 		couples = []
-		for Id in Ids:
-			couples.append(str(int(Id))+'#'+line)
+		for i in I:
+			couples.append(str(i)+'#'+line)
 		couples = '_'.join(couples)
-		assert(len(Ids)!=0)
+		assert(len(I)!=0)
 		return(couples)
+		
 
 	def generate_metadata(self):
-		nbr_line_csv = self.histo
-		columns = [['Id', 'min_ra', 'max_ra', 'min_decl', 'max_decl','nbr_line_csv','N','M']]
+		nbr_line_csv = self.histo_2
+		columns = [['Id', 'min_ra', 'max_ra', 'min_decl', 'max_decl','nbr_line_csv','M','N']]
 		lines = []
 		for i in range(self.N):
-			for j in range(self.N):
+			for j in range(self.M):
 				g = self.grid[i][j]
 				Id = g.Id
-				lines.append([Id, g.min_ra, g.max_ra, g.min_decl, g.max_decl, nbr_line_csv[Id],self.N,self.N])
+				lines.append([Id, g.min_ra, g.max_ra, g.min_decl, g.max_decl, nbr_line_csv[Id],self.M,self.N])
 		lines = columns + lines
 		lines = map(lambda x : str(x).replace('[','').replace(']','').replace("'",'') ,lines)
 		return(lines)
 
 ### A function to count elements in each partition 
 def count_in_a_partition(iterator):
-	s sum(1 for _ in iterator)
+	yield sum(1 for _ in iterator)
 
-def get_deciles(iterator):
-	
-	
+def please_sample_ra(Data, index):
+	d = Data.sample(False,0.005,seed=0).map(lambda l : t_ra(float(l[index])))
+    	return(d)
+
+def please_sample_decl(iterator):
+	d = Data.map(lambda : line[decl])
 
 ### to turn "15#line" in (15, "line")
 def clean_couple(cou):
 	C = cou.split("#")
+	if not C:
+		print(cou)
 	C[0] = int(C[0].encode('ascii','ignore'))
-	#print(C)
 	return(tuple(C))
-	
-### A function to create the partition.
-def fill(grid, logData):
-	ra = dico_source["ra"]
-	decl = dico_source["decl"]
-	d_split = logData.map(lambda line : line.split(','))
-	first_part = d_split.map(lambda line : (grid.return_key_value_strings(t_ra(float(line[ra])), float(line[decl]),','.join(line))))\
-			.flatMap(lambda couples : couples.split('_'))\
-			.map(clean_couple)\
-			.partitionBy(grid.N*grid.N)
-	
-	grid.histo = first_part.mapPartitions(count_in_a_partition).coalesce(1).collect()
-	grid.deciles = first_part.mapPartitions(get_deciles).coalesce(1).collect()
-	print("First draft gives: ")
-	print(grid.histo)
-	print('First step of partioning is done. Now let us divide the big parts.')
-	
-	## Brute-force method :
-	# Find the zones that contains too many lines... 
-	big_parts = []
-	big_sizes = []
-	empt_parts = []	
-	nb_of_lines = grid.histo
-	for Id, nb in enumerate(nb_of_lines):
-		if nb>grid.max_lines_in_part:
-			big_parts.append(Id)
-			big_sizes.append(nb)
-		elif nb==0:
-			empt_parts.append(Id)
-	bigs = sorted(zip(big_parts,big_sizes), key = lambda t : t[1])
-	
-	##...redefine our grid...
-	while empt_parts and bigs:
-		while bigs:
-			Id, size = bigs.pop(0)
-			J = Id%grid.N
-			I = (Id - J)/grid.N
-			Big_zone = grid.grid[I][J]
-			nb_to_fill = size//grid.max_lines_in_part
-			my_empt_to_fill = []
-			nb_filled = 0
-			while empt_parts and len(my_empt_to_fill)<nb_to_fill:
-				empt = empt_parts.pop(0)
-				j = empt%grid.N
-				i = (empt-j)/grid.N
-				my_empt_to_fill.append(grid.grid[i][j])
-				nb_filled+=1
-			# We split on decl because they seemed close in early partitions.
-			a = Big_zone.min_decl
-			b = Big_zone.max_decl
-			for index, e in enumerate(my_empt_to_fill):
-				e.min_ra = Big_zone.min_ra
-				e.max_ra = Big_zone.max_ra
-				e.min_decl = a + (b-a)*(index+1)/(nb_filled+1)
-				e.max_decl = a + (b-a)*(index+2)/(nb_filled+1)
-			Big_zone.max_decl = a + (b-a)*1/(nb_filled+1)
-				
-	## ...and reiterate over all the data	
-	second_part = d_split.map(lambda line : (grid.return_key_value_strings_on_second_part(t_ra(float(line[ra])), float(line[decl]),','.join(line))))\
-			.flatMap(lambda couples : couples.split('_'))\
-			.map(clean_couple)\
-			.partitionBy(grid.N*grid.N).map(lambda tu : tu[1])
-	grid.histo = second_part.mapPartitions(count_in_a_partition).coalesce(1).collect()
-	second_part.saveAsTextFile('hdfs:///user/'+identifiant + '/'+name_partition+'/')
-	print("After division: ")
-	print(grid.histo)
-	
-## PARAMS
-OVERLAP = 0.10 #0.10 is default value
-MAX_LINES_IN_PART = 175000 #security
 
+### A function to create the partition.
+def fill(grid,Data,ra,decl):
+    	first_part = Data.map(lambda line : (grid.return_part_1(t_ra(float(line[ra])),','.join(line))))\
+			.flatMap(lambda couples : couples.split('_'))\
+			.map(clean_couple)\
+			.partitionBy(grid.M)
+	grid.histo_1 = first_part.mapPartitions(count_in_a_partition).coalesce(1).collect()
+	print("First partion in nb lines gives: ")
+	print(grid.histo_1)
+    	## sampling decl
+	print(grid)
+	sampled_decl = first_part.sample(False, 0.005, seed = 0).map(lambda t: float(t[1].split(',')[decl])).glom().collect()
+	deciles_decl = []	
+	for part in sampled_decl:
+		deciles_decl.append([np.percentile(part, q) for q in np.array(list(range(grid.N+1)))*100/(grid.N+1.0)])		
+	
+	grid.update_decl(deciles_decl)
+	for i in range(grid.M):
+		print(str(grid.grid_2[i]))	
+	second_part = Data.map(lambda line : (grid.return_part_2(t_ra(float(line[ra])),float(line[decl]),','.join(line))))\
+			.flatMap(lambda couples : couples.split('_'))\
+			.filter(lambda x : x!=[''])\
+			.map(clean_couple)\
+			.partitionBy(grid.N*grid.M)
+	grid.histo_2 = second_part.mapPartitions(count_in_a_partition).coalesce(1).collect()
+	print("After second step, in nb lines :")
+	print(grid.histo_2)
+	return(second_part)
+## PARAMS
+OVERLAP = 0.05 #0.05 is new value
+MAX_LINES_IN_PART = 175000
+M = 10 
+N = 5
 ## COMPUTATIONS
-G = Grid(minmaxs,7, OVERLAP,MAX_LINES_IN_PART)
-fill(G, sc.textFile("/tp-data/Source/Source-*.csv"))
+G = Grid(minmaxs,M,N, OVERLAP, MAX_LINES_IN_PART)
+
+Data = sc.textFile("/tp-data/Source/Source-001.csv").map(lambda line : line.split(','))
+sampled_ra = please_sample_ra(Data, dico_source["ra"]).collect()
+
+deciles_ra = [np.percentile(sampled_ra, q) for q in np.array(list(range(M+1)))*100/(M+1.0)]
+G.update_ra(deciles_ra)
+second_part = fill(G, Data,dico_source["ra"],dico_source["decl"])
+part_repo = 'hdfs:///user/'+identifiant+'/'+name_partition+'/'
+second_part.saveAsTextFile(part_repo)
+"""
 csv_file_name = 'hdfs:///user/'+identifiant+'/'+name_partition+'/Partition_metadata/'
 
 lines = G.generate_metadata()
 sc.parallelize(lines,1).saveAsTextFile(csv_file_name) #had to be outside!
 print('The End.')
+"""
 
